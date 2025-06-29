@@ -80,7 +80,9 @@ dist
 
 # Gatsby files
 .cache/
-public
+# Note: React's frontend/public directory should be included in git
+# Only exclude Gatsby's generated public directory if using Gatsby
+# gatsby/public/
 
 # Storybook build outputs
 .out
