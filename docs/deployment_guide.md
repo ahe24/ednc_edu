@@ -2,6 +2,46 @@
 
 This guide explains how to deploy the ED&C Education System to another Rocky Linux 9 server with a different IP address.
 
+## 📋 Repository Information
+
+**GitHub Repository:** [https://github.com/ahe24/ednc_edu](https://github.com/ahe24/ednc_edu)  
+**Clone URL:** `https://github.com/ahe24/ednc_edu.git`  
+**Main Branch:** `main`
+
+The complete source code, documentation, and deployment files are available on GitHub. This guide focuses on deploying the system using the GitHub repository as the source.
+
+## ⚡ Quick Start (GitHub Method)
+
+For experienced users who want to deploy quickly:
+
+```bash
+# Install prerequisites (Rocky Linux 9)
+sudo dnf update -y
+curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash -
+sudo dnf install -y nodejs git sqlite
+sudo npm install -g pm2 serve
+
+# Clone and deploy
+git clone https://github.com/ahe24/ednc_edu.git
+cd ednc_edu
+
+# Setup environment (replace YOUR_SERVER_IP with actual IP)
+echo "REACT_APP_API_URL=http://YOUR_SERVER_IP:5000/api" > frontend/.env
+echo -e "PORT=5000\nNODE_ENV=production\nJWT_SECRET=$(openssl rand -base64 32)\nCORS_ORIGIN=http://YOUR_SERVER_IP:3000\nDB_PATH=./database/ednc_edu.db" > backend/.env
+
+# Build and start
+cd backend && npm install && npm run build && cd ..
+cd frontend && npm install && npm run build && cd ..
+pm2 start ecosystem.config.js && pm2 save
+
+# Open firewall ports
+sudo firewall-cmd --zone=public --add-port=3000/tcp --add-port=5000/tcp --permanent && sudo firewall-cmd --reload
+```
+
+**Access:** Frontend at `http://YOUR_SERVER_IP:3000`, API at `http://YOUR_SERVER_IP:5000`
+
+---
+
 ## 📋 Prerequisites
 
 ### System Requirements
@@ -47,23 +87,47 @@ sqlite3 --version
 pm2 --version
 ```
 
-## 📁 Step 2: Transfer Code to New Server
+## 📁 Step 2: Get Code from GitHub
 
-### Option A: Using Git (Recommended)
+### Option A: Clone from GitHub (Recommended)
+The ED&C Education System is available on GitHub at: **https://github.com/ahe24/ednc_edu.git**
+
 ```bash
 # On new server
 cd /home/[username]
-git clone [your-repository-url]
+
+# Clone the repository
+git clone https://github.com/ahe24/ednc_edu.git
+
+# Enter project directory
+cd ednc_edu
+
+# Verify the code is properly cloned
+ls -la
+```
+
+### Option B: Download and Extract ZIP
+If you don't have Git installed or prefer not to use it:
+
+```bash
+# Download the latest release as ZIP
+wget https://github.com/ahe24/ednc_edu/archive/refs/heads/main.zip
+
+# Extract the archive
+unzip main.zip
+
+# Rename and enter directory
+mv ednc_edu-main ednc_edu
 cd ednc_edu
 ```
 
-### Option B: Using SCP from Current Server
+### Option C: Using SCP from Current Server (Alternative)
 ```bash
 # From current server, copy to new server
 scp -r /home/csjo/a2_cursor/ednc_edu username@NEW_IP_ADDRESS:/home/username/
 ```
 
-### Option C: Using rsync
+### Option D: Using rsync (Alternative)
 ```bash
 # From current server
 rsync -avz --exclude node_modules --exclude dist --exclude build \
@@ -285,7 +349,7 @@ cat > deploy.sh << 'EOF'
 NEW_SERVER_IP="YOUR_NEW_SERVER_IP"
 USERNAME="your_username"
 
-echo "🚀 Deploying ED&C Education System..."
+echo "🚀 Deploying ED&C Education System from GitHub..."
 
 # Check if required tools are installed
 if ! command -v node &> /dev/null; then
@@ -293,9 +357,30 @@ if ! command -v node &> /dev/null; then
     exit 1
 fi
 
+if ! command -v git &> /dev/null; then
+    echo "❌ Git is not installed. Please install Git first."
+    exit 1
+fi
+
 if ! command -v pm2 &> /dev/null; then
     echo "❌ PM2 is not installed. Installing PM2..."
     sudo npm install -g pm2
+fi
+
+if ! command -v serve &> /dev/null; then
+    echo "📦 Installing serve for frontend..."
+    sudo npm install -g serve
+fi
+
+# Clone repository if it doesn't exist
+if [ ! -d "ednc_edu" ]; then
+    echo "📥 Cloning repository from GitHub..."
+    git clone https://github.com/ahe24/ednc_edu.git
+    cd ednc_edu
+else
+    echo "📂 Repository already exists, updating..."
+    cd ednc_edu
+    git pull origin main
 fi
 
 # Install dependencies and build
@@ -330,6 +415,9 @@ echo "🌐 Frontend: http://${NEW_SERVER_IP}:3000"
 echo "🔧 Backend API: http://${NEW_SERVER_IP}:5000"
 echo "📊 PM2 Status: pm2 status"
 echo "📝 Logs: pm2 logs"
+echo ""
+echo "🔄 To update in the future, run:"
+echo "   cd ednc_edu && git pull origin main && ./deploy.sh"
 EOF
 
 chmod +x deploy.sh
@@ -371,17 +459,68 @@ openssl rand -base64 32
 
 ## 🔄 Maintenance and Updates
 
-### Updating the Application
+### Updating from GitHub Repository
+If you deployed using the GitHub method (Option A), you can easily update to the latest version:
+
 ```bash
-# Pull latest changes
+# Navigate to project directory
+cd /home/[username]/ednc_edu
+
+# Pull latest changes from GitHub
 git pull origin main
 
-# Rebuild and restart
-cd backend && npm run build && cd ..
-cd frontend && npm run build && cd ..
+# Rebuild backend
+cd backend && npm install && npm run build && cd ..
+
+# Rebuild frontend
+cd frontend && npm install && npm run build && cd ..
 
 # Restart PM2 processes
 pm2 restart all
+
+# Verify everything is working
+pm2 status
+```
+
+### Manual Update (for ZIP deployment)
+If you deployed using the ZIP download method:
+
+```bash
+# Create backup of current installation
+cd /home/[username]
+cp -r ednc_edu ednc_edu_backup_$(date +%Y%m%d_%H%M%S)
+
+# Download latest version
+wget https://github.com/ahe24/ednc_edu/archive/refs/heads/main.zip
+unzip main.zip
+
+# Preserve your configuration files
+cp ednc_edu/backend/.env ednc_edu-main/backend/
+cp ednc_edu/frontend/.env ednc_edu-main/frontend/
+
+# Replace old installation
+rm -rf ednc_edu
+mv ednc_edu-main ednc_edu
+cd ednc_edu
+
+# Rebuild and restart
+cd backend && npm install && npm run build && cd ..
+cd frontend && npm install && npm run build && cd ..
+pm2 restart all
+```
+
+### Checking for Updates
+```bash
+# Check current version (if using git)
+cd /home/[username]/ednc_edu
+git log --oneline -5
+
+# Check for remote updates
+git fetch origin
+git status
+
+# See what changes are available
+git log HEAD..origin/main --oneline
 ```
 
 ### Database Backup
@@ -438,13 +577,67 @@ free -h
 top
 ```
 
+## 🤝 Contributing and Development
+
+### Setting up Development Environment
+```bash
+# Clone the repository
+git clone https://github.com/ahe24/ednc_edu.git
+cd ednc_edu
+
+# Setup backend development
+cd backend
+npm install
+cp .env.example .env  # Edit with your settings
+npm run dev
+
+# Setup frontend development (new terminal)
+cd frontend
+npm install
+npm start
+```
+
+### Contributing Guidelines
+1. **Fork** the repository on GitHub
+2. **Create** a feature branch: `git checkout -b feature/your-feature-name`
+3. **Make** your changes and commit: `git commit -m "Add your feature"`
+4. **Push** to your fork: `git push origin feature/your-feature-name`
+5. **Submit** a Pull Request on GitHub
+
+### Version Control Best Practices
+```bash
+# Keep your local repository updated
+git fetch origin
+git pull origin main
+
+# Create feature branches for new work
+git checkout -b feature/new-feature
+
+# Make descriptive commits
+git commit -m "feat: add email validation to student registration"
+
+# Push changes to your fork
+git push origin feature/new-feature
+```
+
 ## 📞 Support
 
 For issues related to:
 - **Application bugs:** Check application logs with `pm2 logs`
-- **System issues:** Check system logs with `journalctl -f`
+- **System issues:** Check system logs with `journalctl -f`  
 - **Network issues:** Verify firewall and network configuration
+- **GitHub issues:** Submit an issue at [https://github.com/ahe24/ednc_edu/issues](https://github.com/ahe24/ednc_edu/issues)
+
+### Getting Help
+1. **Check the logs** first: `pm2 logs`
+2. **Review this guide** for common solutions
+3. **Check GitHub issues** for similar problems
+4. **Create a new issue** on GitHub with:
+   - System information (OS version, Node.js version)
+   - Error messages and logs
+   - Steps to reproduce the issue
 
 ---
 
+**Repository:** [https://github.com/ahe24/ednc_edu](https://github.com/ahe24/ednc_edu)  
 **Note:** Remember to replace all placeholder values (NEW_SERVER_IP, username, etc.) with your actual values before deployment. 
